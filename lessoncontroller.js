@@ -115,40 +115,71 @@ function initLessonRoutes(app) {
 
     //generate Lessons
     app.post('/generatelessons', jsonParser, authenticateToken, async (req, res) => {
+        let requestbody = req.body;
         let { startdate, enddate, day, starthour, startminute, endhour, endminute, id_module } = req.body;
-    
+
+
         try {
-            let currDate = new Date(startdate);
-            const endDate = new Date(enddate);
-            let generatedLessons = [];
-    
-            // Ciclo sull'intervallo di date
-            while (currDate <= endDate) {
-                if (currDate.getDay() === day) {
-                    // Imposta l'orario di inizio e fine
-                    let startTime = new Date(currDate.setHours(starthour, startminute, 0, 0));
-                    let endTime = new Date(currDate.setHours(endhour, endminute, 0, 0));
-    
-                    // Inserisci la lezione nel database
-                    await con.execute(`INSERT INTO lessons (id_module, start_time, end_time) VALUES (?, ?, ?)`, [id_module, startTime, endTime]);
-                    
-                    // Aggiungi la lezione all'elenco generato
-                    generatedLessons.push({ id_module, start_time: startTime, end_time: endTime });
-                }
-    
-                // Passa al giorno successivo
-                currDate.setDate(currDate.getDate() + 1);
+            //validation module
+            const moduleValidation = await con.query(`SELECT id FROM modules WHERE id = ?`, [id_module]);
+            if (moduleValidation[0].length < 1) {
+                return res.json({ error: true, errormessage: "INVALID_MODULE_ID" });
             }
-    
-            // Restituisci le lezioni generate
-            res.json({ success: true, lessons: generatedLessons });
-    
-        } catch (err) {
-            console.log("Generatelessons Error: " + err);
+            //validation date
+            let startDateObj = new Date(startdate);
+            let endDateObj = new Date(enddate);
+
+
+            if (startDateObj > endDateObj) {
+                return res.json({ error: true, errormessage: "START_DATE_AFTER_END_DATE" });
+            }
+            // Validazione dell'orario di inizio e fine
+            if (starthour > endhour || (starthour === endhour && startminute >= endminute)) {
+                return res.json({ error: true, errormessage: "INVALID_TIME_RANGE" });
+            }
+
+
+            let currentDate = new Date(startdate);
+            let endDate = new Date(enddate);
+
+
+            generatedLessons = [];
+
+
+            while (currentDate <= endDate) {
+                if (currentDate.getDay() === day) {
+                    let year = currentDate.getFullYear();
+                    let month = currentDate.getMonth();
+                    let date = currentDate.getDate();
+
+
+                    //lezioni
+                    let LessonsStartDate = new Date(year, month, date, requestbody.starthour, requestbody.startminute);
+                    let LessonsEndDate = new Date(year, month, date, requestbody.endhour, requestbody.endminute);
+
+
+                    const moduleValidation = await con.query(`select id from lessons where id_module = ? and ? between startdate and enddate
+            or ? between startdate and enddate`, [id_module, LessonsStartDateStartDate, LessonsEndDateEndDate]);
+                    if (moduleValidation[0].length < 1) {
+                        let [data] = await con.execute(`INSERT INTO lessons (id_module, LessonsStartdate, LessonsEnddate, argument, note) VALUES (?, ?, ?, ?, ?)`,
+                            [id_module, LessonsStartDate, LessonsEndDate, null, null]);
+
+
+                        generatedLessons.push({ id: data.insertId, id_module, LessonsStartDate, LessonsEndDate });
+                    }
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            res.json(generatedLessons);
+        } catch (error) {
+            console.error(error);
             res.json({ error: true, errormessage: "GENERIC_ERROR" });
         }
     });
-    
+
+
+
+
 
     app.get('/getcalendar', jsonParser, authenticateToken, async (req, res) => {
         let requestbody = req.body;
@@ -166,7 +197,7 @@ function initLessonRoutes(app) {
         //firma presenza
     })
 
-    
+
     app.get('/getlessonpresences', jsonParser, authenticateToken, async (req, res) => {
         let requestbody = req.body;
         //recupera l'elenco delle presenze
