@@ -116,8 +116,14 @@ function initLessonRoutes(app) {
     //generate Lessons
     app.post('/generatelessons', jsonParser, authenticateToken, async (req, res) => {
         let requestbody = req.body;
-        let { startdate, enddate, day, starthour, startminute, endhour, endminute, id_module } = req.body;
-
+        let startdate = requestbody.startdate;
+        let enddate = requestbody.enddate;
+        let day = requestbody.day;
+        let starthour = requestbody.starthour;
+        let startminute = requestbody.startminute;
+        let endhour = requestbody.endhour;
+        let endminute = requestbody.endminute;
+        let id_module = requestbody.id_module;
 
         try {
             //validation module
@@ -154,21 +160,21 @@ function initLessonRoutes(app) {
 
 
                     //lezioni
-                    let LessonsStartDate = new Date(year, month, date, requestbody.starthour, requestbody.startminute);
-                    let LessonsEndDate = new Date(year, month, date, requestbody.endhour, requestbody.endminute);
+                    let lessonsStartDate = new Date(year, month, date, requestbody.starthour, requestbody.startminute);
+                    let lessonsEndDate = new Date(year, month, date, requestbody.endhour, requestbody.endminute);
 
 
                     const moduleValidation = await con.query(`select id from lessons where id_module = ? and ? between startdate and enddate
-            or ? between startdate and enddate`, [id_module, LessonsStartDateStartDate, LessonsEndDateEndDate]);
+            or ? between startdate and enddate`, [id_module, lessonsStartDate, lessonsEndDate]);
                     if (moduleValidation[0].length < 1) {
-                        let [data] = await con.execute(`INSERT INTO lessons (id_module, LessonsStartdate, LessonsEnddate, argument, note) VALUES (?, ?, ?, ?, ?)`,
-                            [id_module, LessonsStartDate, LessonsEndDate, null, null]);
+                        let [data] = await con.execute(`INSERT INTO lessons (id_module, startdate, enddate, argument, note) VALUES (?, ?, ?, ?, ?)`,
+                            [id_module, lessonsStartDate, lessonsEndDate, null, null]);
 
 
-                        generatedLessons.push({ id: data.insertId, id_module, LessonsStartDate, LessonsEndDate });
+                        generatedLessons.push({ id: data.insertId, id_module, lessonsStartDate, lessonsEndDate });
                     }
                 }
-                currentDate.setDate(currentDate.getDate() + 1);
+                currentDate.setDate(currentDate.getDate() + 1); 
             }
             res.json(generatedLessons);
         } catch (error) {
@@ -194,8 +200,50 @@ function initLessonRoutes(app) {
 
     app.post('/signpresence', jsonParser, authenticateToken, async (req, res) => {
         let requestbody = req.body;
-        //firma presenza
-    })
+        let date = requestbody.date;
+        let userId = requestbody.date;
+        let moduleId = requestbody.date;
+        try {
+            // check if data it's inside the body
+            if (!date) {
+                return res.json({ error: true, errormessage: "DATE_REQUIRED" });
+            }
+    
+            // data validation
+            let presenceDate = new Date(date);
+    
+    
+            // Controllo se la data è nel futuro (puoi personalizzare questa logica come preferisci)
+            let currentDate = new Date();
+            if (presenceDate > currentDate) {
+                return res.json({ error: true, errormessage: "FUTURE_DATE_NOT_ALLOWED" });
+            }
+    
+            // validation id module and id user
+            const userValidation = await con.query(`SELECT id FROM users WHERE id = ?`, [userId]);
+            if (userValidation[0].length < 1) {
+                return res.json({ error: true, errormessage: "INVALID_USER_ID" });
+            }
+    
+            const moduleValidation = await con.query(`SELECT id FROM modules WHERE id = ?`, [moduleId]);
+            if (moduleValidation[0].length < 1) {
+                return res.json({ error: true, errormessage: "INVALID_MODULE_ID" });
+            }
+    
+            let [data] = await con.execute(`
+                INSERT INTO presence (user_id, module_id, presence_date) 
+                VALUES (?, ?, ?)`,
+                [userId, moduleId, presenceDate]
+            );
+    
+            // Risposta di successo
+            res.json({ success: true, message: "Presence signed successfully", presenceId: data.insertId });
+        } catch (error) {
+            console.error(error);
+            res.json({ error: true, errormessage: "GENERIC_ERROR" });
+        }
+    });
+    
 
 
     app.get('/getlessonpresences', jsonParser, authenticateToken, async (req, res) => {
